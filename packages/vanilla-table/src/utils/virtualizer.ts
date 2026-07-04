@@ -19,6 +19,10 @@ export class Virtualizer {
   private clientHeight = 0
   private scrollElement: HTMLElement | null = null
   private cleanupListener: (() => void) | null = null
+  private pollInterval: any = null
+  private pollTimeout: any = null
+  private cachedOffsets: Array<number> | null = null
+  private cachedTotalSize: number | null = null
 
   constructor(options: VirtualizerOptions) {
     this.options = { overscan: 5, ...options }
@@ -60,21 +64,45 @@ export class Virtualizer {
         el.removeEventListener('scroll', handleScroll)
         ro.disconnect()
       }
+
+      if (this.pollInterval) {
+        clearInterval(this.pollInterval)
+        this.pollInterval = null
+      }
+      if (this.pollTimeout) {
+        clearTimeout(this.pollTimeout)
+        this.pollTimeout = null
+      }
+
       return true
     }
 
     if (!bindScroll()) {
-      const interval = setInterval(() => {
+      this.pollInterval = setInterval(() => {
         if (bindScroll()) {
-          clearInterval(interval)
+          // Already cleared in bindScroll
         }
       }, 50)
 
-      setTimeout(() => clearInterval(interval), 5000)
+      this.pollTimeout = setTimeout(() => {
+        if (this.pollInterval) {
+          clearInterval(this.pollInterval)
+          this.pollInterval = null
+        }
+        this.pollTimeout = null
+      }, 5000)
     }
   }
 
   public updateOptions(newOptions: Partial<VirtualizerOptions>) {
+    const countChanged = newOptions.count !== undefined && newOptions.count !== this.options.count
+    const estimateSizeChanged = newOptions.estimateSize !== undefined && newOptions.estimateSize !== this.options.estimateSize
+    
+    if (countChanged || estimateSizeChanged) {
+      this.cachedOffsets = null
+      this.cachedTotalSize = null
+    }
+
     this.options = { ...this.options, ...newOptions }
     const el = this.options.getScrollElement()
     if (el && el !== this.scrollElement) {
@@ -89,24 +117,37 @@ export class Virtualizer {
       this.cleanupListener = null
     }
     this.scrollElement = null
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval)
+      this.pollInterval = null
+    }
+    if (this.pollTimeout) {
+      clearTimeout(this.pollTimeout)
+      this.pollTimeout = null
+    }
   }
 
   private getOffsets(): Array<number> {
+    if (this.cachedOffsets !== null) {
+      return this.cachedOffsets
+    }
     const offsets: Array<number> = []
     let currentOffset = 0
     for (let i = 0; i < this.options.count; i++) {
       offsets.push(currentOffset)
       currentOffset += this.options.estimateSize(i)
     }
+    this.cachedOffsets = offsets
+    this.cachedTotalSize = currentOffset
     return offsets
   }
 
   public getTotalSize(): number {
-    let total = 0
-    for (let i = 0; i < this.options.count; i++) {
-      total += this.options.estimateSize(i)
+    if (this.cachedTotalSize !== null) {
+      return this.cachedTotalSize
     }
-    return total
+    this.getOffsets()
+    return this.cachedTotalSize ?? 0
   }
 
   public getVirtualItems(): Array<VirtualItem> {
@@ -123,8 +164,8 @@ export class Virtualizer {
     let high = count - 1
     while (low <= high) {
       const mid = Math.floor((low + high) / 2)
-      const start = offsets[mid]
-      const end = start + this.options.estimateSize(mid)
+      const start = offsets[mid]!
+      const end = mid < count - 1 ? offsets[mid + 1]! : this.getTotalSize()
 
       if (start <= this.scrollTop && end >= this.scrollTop) {
         startIndex = mid
@@ -144,8 +185,8 @@ export class Virtualizer {
     high = count - 1
     while (low <= high) {
       const mid = Math.floor((low + high) / 2)
-      const start = offsets[mid]
-      const end = start + this.options.estimateSize(mid)
+      const start = offsets[mid]!
+      const end = mid < count - 1 ? offsets[mid + 1]! : this.getTotalSize()
 
       if (start <= viewBottom && end >= viewBottom) {
         endIndex = mid
@@ -165,11 +206,13 @@ export class Virtualizer {
 
     const items: Array<VirtualItem> = []
     for (let i = activeStart; i <= activeEnd; i++) {
+      const start = offsets[i]!
+      const end = i < count - 1 ? offsets[i + 1]! : this.getTotalSize()
       items.push({
         index: i,
-        start: offsets[i],
-        size: this.options.estimateSize(i),
-        end: offsets[i] + this.options.estimateSize(i),
+        start,
+        size: end - start,
+        end,
       })
     }
 

@@ -1,5 +1,5 @@
 import './index.css'
-import { createVanillaTable, createCoreRowModel, createPaginatedRowModel } from '@tanstack/vanilla-table'
+import { createVanillaTable, createPaginatedRowModel, tableFeatures, rowPaginationFeature } from '@tanstack/vanilla-table'
 import { makeData } from './makeData'
 
 let data = makeData(20)
@@ -40,8 +40,10 @@ const columns = [
 const table = createVanillaTable({
   data,
   columns,
-  getCoreRowModel: createCoreRowModel(),
-  getPaginationRowModel: createPaginatedRowModel(),
+  features: tableFeatures({
+    rowPaginationFeature,
+    paginatedRowModel: createPaginatedRowModel(),
+  }),
   initialState: {
     pagination: { pageIndex: 0, pageSize: 10 },
   },

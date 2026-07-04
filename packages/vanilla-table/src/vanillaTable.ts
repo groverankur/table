@@ -15,6 +15,7 @@ export * from '@tanstack/table-core';
 export interface VanillaTable<TData> extends Table<any, TData> {
   subscribe: (listener: (state: TableState<any>) => void) => () => void;
   getState: () => TableState<any>;
+  destroy: () => void;
 }
 
 export function createVanillaTable<TData>(options: TableOptions<any, TData>): VanillaTable<TData> {
@@ -61,7 +62,7 @@ export function createVanillaTable<TData>(options: TableOptions<any, TData>): Va
 
   table.getState = () => table.store.state;
 
-  table.store.subscribe((state) => {
+  const unsubscribeStore = table.store.subscribe((state) => {
     listeners.forEach((listener) => listener(state as any));
   });
 
@@ -71,6 +72,11 @@ export function createVanillaTable<TData>(options: TableOptions<any, TData>): Va
     return () => {
       listeners.delete(listener);
     };
+  };
+
+  table.destroy = () => {
+    listeners.clear();
+    unsubscribeStore();
   };
 
   return table;

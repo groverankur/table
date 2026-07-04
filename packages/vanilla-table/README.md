@@ -40,11 +40,11 @@
 > - [Svelte Table](https://tanstack.com/table/alpha/docs/framework/svelte/svelte-table)
 > - [Vue Table](https://tanstack.com/table/alpha/docs/framework/vue/vue-table)
 > - [Alpine Table](https://tanstack.com/table/alpha/docs/framework/alpine/alpine-table)
-> - [Alpine Table](https://tanstack.com/table/alpha/docs/framework/alpine/vanilla-table)
+> - [Vanilla Table](https://tanstack.com/table/alpha/docs/framework/vanilla/vanilla-table)
 
 A headless table library for building powerful datagrids with full control over markup, styles, and behavior.
 
-- Framework‑agnostic core with bindings for React, Vue , Solid , Apline & vanilla JS/TS
+- Framework‑agnostic core with bindings for React, Vue , Solid , Alpine & vanilla JS/TS
 - 100% customizable — bring your own UI, components, and styles
 - Sorting, filtering, grouping, aggregation & row selection
 - Lightweight, virtualizable & server‑side friendly

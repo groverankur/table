@@ -1,5 +1,5 @@
 import './index.css'
-import { createVanillaTable, fuzzyFilterFn, createCoreRowModel, createFilteredRowModel } from '@tanstack/vanilla-table'
+import { createVanillaTable, fuzzyFilterFn, createFilteredRowModel, tableFeatures, columnFilteringFeature } from '@tanstack/vanilla-table'
 import { makeData } from './makeData'
 
 let data = makeData(50)
@@ -44,79 +44,108 @@ const table = createVanillaTable({
     fuzzy: fuzzyFilterFn,
   },
   globalFilterFn: 'fuzzy',
-  getCoreRowModel: createCoreRowModel(),
-  getFilteredRowModel: createFilteredRowModel(),
+  features: tableFeatures({
+    columnFilteringFeature,
+    filteredRowModel: createFilteredRowModel(),
+  }),
   initialState: {
     columnFilters: [],
     globalFilter: '',
   },
 })
 
-const renderTable = () => {
-  const wrapperElement = document.getElementById('wrapper') as HTMLDivElement
-  wrapperElement.innerHTML = ''
+// Setup stable DOM layout once
+const wrapperElement = document.getElementById('wrapper') as HTMLDivElement
+wrapperElement.innerHTML = ''
 
-  // Global Search Input
-  const searchHeader = document.createElement('div')
-  searchHeader.style.marginBottom = '15px'
-  
-  const searchLabel = document.createElement('span')
-  searchLabel.textContent = 'Global Fuzzy Search: '
-  
-  const searchInput = document.createElement('input')
-  searchInput.placeholder = 'Search first & last name...'
-  searchInput.value = (table.getState().globalFilter as string) || ''
-  searchInput.oninput = (e) => {
-    table.setGlobalFilter((e.target as HTMLInputElement).value)
-  }
-  
-  searchHeader.appendChild(searchLabel)
-  searchHeader.appendChild(searchInput)
-  wrapperElement.appendChild(searchHeader)
+// Global Search Input
+const searchHeader = document.createElement('div')
+searchHeader.style.marginBottom = '15px'
 
-  // Create table element
-  const tableEl = document.createElement('table')
-  tableEl.border = '1'
+const searchLabel = document.createElement('span')
+searchLabel.textContent = 'Global Fuzzy Search: '
 
-  // Thead
-  const thead = document.createElement('thead')
-  
-  // Column headers row
-  const trHeaders = document.createElement('tr')
-  table.getHeaderGroups().forEach((headerGroup) => {
-    headerGroup.headers.forEach((header) => {
-      const th = document.createElement('th')
-      th.textContent = header.isPlaceholder ? '' : String(header.column.columnDef.header || '')
-      trHeaders.appendChild(th)
-    })
+const searchInput = document.createElement('input')
+searchInput.placeholder = 'Search first & last name...'
+searchInput.oninput = (e) => {
+  table.setGlobalFilter((e.target as HTMLInputElement).value)
+}
+
+searchHeader.appendChild(searchLabel)
+searchHeader.appendChild(searchInput)
+wrapperElement.appendChild(searchHeader)
+
+// Create table element
+const tableEl = document.createElement('table')
+tableEl.border = '1'
+
+const thead = document.createElement('thead')
+const tbody = document.createElement('tbody')
+tableEl.appendChild(thead)
+tableEl.appendChild(tbody)
+wrapperElement.appendChild(tableEl)
+
+// Record count
+const countDiv = document.createElement('div')
+countDiv.style.marginTop = '10px'
+wrapperElement.appendChild(countDiv)
+
+// Render headers & filters once
+const trHeaders = document.createElement('tr')
+table.getHeaderGroups().forEach((headerGroup) => {
+  headerGroup.headers.forEach((header) => {
+    const th = document.createElement('th')
+    th.textContent = header.isPlaceholder ? '' : String(header.column.columnDef.header || '')
+    trHeaders.appendChild(th)
   })
-  thead.appendChild(trHeaders)
+})
+thead.appendChild(trHeaders)
 
-  // Column filters row (rendered immediately below headers)
-  const trFilters = document.createElement('tr')
-  table.getHeaderGroups().forEach((headerGroup) => {
-    headerGroup.headers.forEach((header) => {
-      const th = document.createElement('th')
-      if (header.isPlaceholder || !header.column.getCanFilter()) {
-        th.textContent = ''
-      } else {
-        const filterInput = document.createElement('input')
-        filterInput.placeholder = `Filter ${header.column.id}...`
-        filterInput.style.width = '80%'
-        filterInput.value = (header.column.getFilterValue() as string) || ''
-        filterInput.oninput = (e) => {
-          header.column.setFilterValue((e.target as HTMLInputElement).value)
-        }
-        th.appendChild(filterInput)
+const trFilters = document.createElement('tr')
+const filterInputs: Record<string, HTMLInputElement> = {}
+
+table.getHeaderGroups().forEach((headerGroup) => {
+  headerGroup.headers.forEach((header) => {
+    const th = document.createElement('th')
+    if (!header.isPlaceholder && header.column.getCanFilter()) {
+      const filterInput = document.createElement('input')
+      filterInput.placeholder = `Filter ${header.column.id}...`
+      filterInput.style.width = '80%'
+      filterInput.oninput = (e) => {
+        header.column.setFilterValue((e.target as HTMLInputElement).value)
       }
-      trFilters.appendChild(th)
+      filterInputs[header.column.id] = filterInput
+      th.appendChild(filterInput)
+    } else {
+      th.textContent = ''
+    }
+    trFilters.appendChild(th)
+  })
+})
+thead.appendChild(trFilters)
+
+// Render table contents dynamically
+const renderTable = () => {
+  // Update inputs only if they are not active to preserve focus / cursor position
+  const currentGlobalFilter = (table.getState().globalFilter as string) || ''
+  if (document.activeElement !== searchInput && searchInput.value !== currentGlobalFilter) {
+    searchInput.value = currentGlobalFilter
+  }
+
+  table.getHeaderGroups().forEach((headerGroup) => {
+    headerGroup.headers.forEach((header) => {
+      const input = filterInputs[header.column.id]
+      if (input) {
+        const filterVal = (header.column.getFilterValue() as string) || ''
+        if (document.activeElement !== input && input.value !== filterVal) {
+          input.value = filterVal
+        }
+      }
     })
   })
-  thead.appendChild(trFilters)
-  tableEl.appendChild(thead)
 
-  // Tbody
-  const tbody = document.createElement('tbody')
+  // Clear and rebuild only the tbody rows
+  tbody.innerHTML = ''
   table.getRowModel().rows.forEach((row) => {
     const tr = document.createElement('tr')
     row.getAllCells().forEach((cell) => {
@@ -126,14 +155,8 @@ const renderTable = () => {
     })
     tbody.appendChild(tr)
   })
-  tableEl.appendChild(tbody)
-  wrapperElement.appendChild(tableEl)
 
-  // Record count
-  const countDiv = document.createElement('div')
-  countDiv.style.marginTop = '10px'
   countDiv.textContent = `Showing ${table.getRowModel().rows.length} of ${data.length} records`
-  wrapperElement.appendChild(countDiv)
 }
 
 table.subscribe(() => {
